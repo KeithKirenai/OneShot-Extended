@@ -50,8 +50,11 @@ class WiFiScanner:
             networks[-1]['BSSID'] = result.group(1).upper()
 
         def handleEssid(line, result, networks):
-            d = result.group(1)
-            networks[-1]['ESSID'] = codecs.decode(d, 'unicode-escape').encode('latin1').decode('utf-8', errors='replace')
+            try:
+                d = result.group(1)
+                networks[-1]['ESSID'] = codecs.decode(d,'unicode-escape').encode('latin1').decode('utf-8', errors='replace')
+            except (AttributeError, IndexError):
+                networks[-1]['ESSID'] = '<hidden>'  # Default value for hidden networks
 
         def handleLevel(line, result, networks):
             networks[-1]['Level'] = int(float(result.group(1)))
@@ -145,9 +148,12 @@ class WiFiScanner:
                 if res:
                     handler(line, res, networks)
 
-        # Filtering non-WPS networks
-        networks = list(filter(lambda x: bool(x['WPS']), networks))
+        # Filtering non-WPS networks and incomplete entries
+        networks = list(filter(lambda x: bool(x.get('WPS', False)) and
+                               'BSSID' in x and
+                               'ESSID' in x, networks))
         if not networks:
+            print('[!] No valid WPS networks found')
             return False
 
         # Sorting by signal level
@@ -199,9 +205,11 @@ class WiFiScanner:
 
         def entryMaxLength(item: str, max_length=27):
             """Calculates max length of network_list_items entry"""
-
-            lengths = [len(entry[1][item]) for entry in network_list_items]
-            return min(max(lengths), max_length) + 1
+            lengths = []
+            for entry in network_list_items:
+                if item in entry[1]:
+                    lengths.append(len(str(entry[1][item])))
+            return min(max(lengths) if lengths else 0, max_length) + 1
 
         # Used to calculate the max width of a collum in the network list table
         columm_lengths = {
